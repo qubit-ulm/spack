@@ -3,6 +3,7 @@
 #
 # SPDX-License-Identifier: (Apache-2.0 OR MIT)
 
+import spack.builder
 from spack.build_systems import autotools, cmake
 from spack.package import *
 
@@ -22,6 +23,7 @@ class Proj(CMakePackage, AutotoolsPackage):
     # Many packages that depend on proj do not yet support the newer API.
     # See https://github.com/OSGeo/PROJ/wiki/proj.h-adoption-status
 
+    version("9.2.1", sha256="15ebf4afa8744b9e6fccb5d571fc9f338dc3adcf99907d9e62d1af815d4971a1")
     version("9.2.0", sha256="dea816f5aa732ae6b2ee3977b9bdb28b1d848cf56a1aad8faf6708b89f0ed50e")
     version("9.1.1", sha256="003cd4010e52bb5eb8f7de1c143753aa830c8902b6ed01209f294846e40e6d39")
     version("9.1.0", sha256="81b2239b94cad0886222cde4f53cb49d34905aad2a1317244a0c30a553db2315")
@@ -75,6 +77,12 @@ class Proj(CMakePackage, AutotoolsPackage):
         when="@:6",
     )
 
+    patch(
+        "https://github.com/OSGeo/PROJ/commit/3f38a67a354a3a1e5cca97793b9a43860c380d95.patch?full_index=1",
+        sha256="dc620ff1bbcc0ef4130d53a40a8693a1e2e72ebf83bd6289f1139d0f1aad2a40",
+        when="@7:7.2.1",
+    )
+
     # https://proj.org/install.html#build-requirements
     with when("build_system=cmake"):
         depends_on("cmake@3.9:", when="@6:", type="build")
@@ -87,7 +95,7 @@ class Proj(CMakePackage, AutotoolsPackage):
     depends_on("sqlite@3.11:", when="@6:")
     depends_on("libtiff@4:", when="@7:+tiff")
     depends_on("curl@7.29:", when="@7:+curl")
-    depends_on("googletest", when="@6:", type="test")
+    depends_on("googletest@1.8:", when="@6:", type="test")
 
     build_system(
         conditional("autotools", when="@:8"), conditional("cmake", when="@5:"), default="cmake"
@@ -105,7 +113,7 @@ class Proj(CMakePackage, AutotoolsPackage):
         self.setup_run_environment(env)
 
 
-class BaseBuilder:
+class BaseBuilder(metaclass=spack.builder.PhaseCallbacksMeta):
     def setup_dependent_build_environment(self, env, dependent_spec):
         self.pkg.setup_run_environment(env)
 
@@ -117,22 +125,22 @@ class BaseBuilder:
         install_tree(join_path("share", "proj"), self.prefix.share.proj)
 
 
-class CMakeBuilder(cmake.CMakeBuilder, BaseBuilder):
+class CMakeBuilder(BaseBuilder, cmake.CMakeBuilder):
     def cmake_args(self):
         args = [
             self.define_from_variant("ENABLE_TIFF", "tiff"),
             self.define_from_variant("ENABLE_CURL", "curl"),
         ]
-        if self.spec.satisfies("@6:"):
+        if self.spec.satisfies("@6:") and self.pkg.run_tests:
             args.append(self.define("USE_EXTERNAL_GTEST", True))
         return args
 
 
-class AutotoolsBuilder(autotools.AutotoolsBuilder, BaseBuilder):
+class AutotoolsBuilder(BaseBuilder, autotools.AutotoolsBuilder):
     def configure_args(self):
         args = []
 
-        if self.spec.satisfies("@6:"):
+        if self.spec.satisfies("@6:") and self.pkg.run_tests:
             args.append("--with-external-gtest")
 
         if self.spec.satisfies("@7:"):

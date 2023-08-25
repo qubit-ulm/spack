@@ -27,6 +27,8 @@ class Boost(Package):
     maintainers("hainest")
 
     version("develop", branch="develop", submodules=True)
+    version("1.83.0", sha256="6478edfe2f3305127cffe8caf73ea0176c53769f4bf1585be237eb30798c3b8e")
+    version("1.82.0", sha256="a6e1ab9b0860e6a2881dd7b21fe9f737a095e5f33a3a874afc6a345228597ee6")
     version("1.81.0", sha256="71feeed900fbccca04a3b4f2f84a7c217186f28a940ed8b7ed4725986baf99fa")
     version("1.80.0", sha256="1e19565d82e43bc59209a168f5ac899d3ba471d55c7610c677d4ccf2c9c500c0")
     version("1.79.0", sha256="475d589d51a7f8b3ba2ba4eda022b170e562ca3b760ee922c146b6c65856ef39")
@@ -228,7 +230,7 @@ class Boost(Package):
 
     depends_on("mpi", when="+mpi")
     depends_on("bzip2", when="+iostreams")
-    depends_on("zlib", when="+iostreams")
+    depends_on("zlib-api", when="+iostreams")
     depends_on("zstd", when="+iostreams")
     depends_on("xz", when="+iostreams")
     depends_on("py-numpy", when="+numpy", type=("build", "run"))
@@ -397,7 +399,14 @@ class Boost(Package):
     patch("intel-oneapi-linux-jam.patch", when="@1.76: %oneapi")
 
     # https://github.com/boostorg/phoenix/issues/111
-    patch("boost_phoenix_1.81.0.patch", level=2, when="@1.81.0")
+    patch("boost_phoenix_1.81.0.patch", level=2, when="@1.81.0:1.82.0")
+
+    # https://github.com/boostorg/filesystem/issues/284
+    patch(
+        "https://www.boost.org/patches/1_82_0/0002-filesystem-fix-win-smbv1-dir-iterator.patch",
+        sha256="738ba8e0d7b5cdcf5fae4998f9450b51577bbde1bb0d220a0721551609714ca4",
+        when="@1.82.0 platform=windows",
+    )
 
     def patch(self):
         # Disable SSSE3 and AVX2 when using the NVIDIA compiler
@@ -421,6 +430,12 @@ class Boost(Package):
             url = "http://downloads.sourceforge.net/project/boost/boost/{0}/boost_{1}.tar.bz2"
 
         return url.format(version.dotted, version.underscored)
+
+    def flag_handler(self, name, flags):
+        if name == "cxxflags":
+            if self.spec.satisfies("@1.79.0 %oneapi"):
+                flags.append("-Wno-error=enum-constexpr-conversion")
+        return (flags, None, None)
 
     def determine_toolset(self, spec):
         toolsets = {
@@ -518,9 +533,9 @@ class Boost(Package):
                     "-s",
                     "BZIP2_LIBPATH=%s" % spec["bzip2"].prefix.lib,
                     "-s",
-                    "ZLIB_INCLUDE=%s" % spec["zlib"].prefix.include,
+                    "ZLIB_INCLUDE=%s" % spec["zlib-api"].prefix.include,
                     "-s",
-                    "ZLIB_LIBPATH=%s" % spec["zlib"].prefix.lib,
+                    "ZLIB_LIBPATH=%s" % spec["zlib-api"].prefix.lib,
                     "-s",
                     "LZMA_INCLUDE=%s" % spec["xz"].prefix.include,
                     "-s",
